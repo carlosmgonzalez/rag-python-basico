@@ -1,5 +1,5 @@
 import os
-from typing import cast
+from typing import TypedDict, cast
 from uuid import uuid4
 
 import chromadb
@@ -8,13 +8,26 @@ from chromadb.types import Metadata
 from chromadb.utils import embedding_functions
 from dotenv import load_dotenv
 
+from src.ai.openai_client import openai_client
 from src.rag.knowledge_base import INVESTOR_DATA
 
 load_dotenv()
 
 
+class RetrievedFragment(TypedDict):
+    text: str
+    metadata: Metadata
+    similarity: float
+
+
+class ResponseAnswer(TypedDict):
+    response: str
+    fragments_used: list[RetrievedFragment]
+    are_there_context: bool
+
+
 class RAGPipeline:
-    def __init__(self, collection_name: str, db_path: str = "./data/chromadb"):
+    def __init__(self, collection_name: str, db_path: str = "./data/chromadb") -> None:
         self.chroma_client = chromadb.PersistentClient(path=db_path)
 
         self.embedding_function = embedding_functions.OpenAIEmbeddingFunction(
@@ -46,11 +59,11 @@ class RAGPipeline:
         long_text: str,
         chunk_size: int = 500,
         overlap: int = 50,
-        base_metadata: dict | None = None,
-    ):
+        base_metadata: Metadata | None = None,
+    ) -> int:
         chunk_chars_size = chunk_size * 4
 
-        chunks = []
+        chunks: list[str] = []
         start = 0
 
         while start < len(long_text):
@@ -62,10 +75,10 @@ class RAGPipeline:
 
             start = end - (overlap * 4)
 
-        metadatas = []
+        metadatas: list[Metadata] = []
 
         for i, _ in enumerate(chunks):
-            meta = (base_metadata or {}).copy()
+            meta = dict(base_metadata or {})
             meta["chunk_number"] = i
             meta["chunk_total"] = len(chunks)
             metadatas.append(meta)
@@ -76,14 +89,14 @@ class RAGPipeline:
 
     def retrieve_context(
         self, question: str, n_fragments: int = 3
-    ) -> list[dict] | None:
+    ) -> list[RetrievedFragment]:
         results = self.collection.query(
             query_texts=[question],
             n_results=min(n_fragments, self.collection.count()),
             include=["documents", "metadatas", "distances"],
         )
 
-        fragments = []
+        fragments: list[RetrievedFragment] = []
 
         documents = results["documents"]
         distances = results["distances"]
@@ -104,14 +117,68 @@ class RAGPipeline:
 
         return fragments
 
+    def answer(
+        self, question: str, n_fragments: int = 3, verbose: bool = False
+    ) -> ResponseAnswer | None:
+        fragments = self.retrieve_context(question=question, n_fragments=n_fragments)
+
+        if not fragments:
+            return {
+                "response": "There are not information about the question in this knowledge base",
+                "fragments_used": [],
+                "are_there_context": False,
+            }
+
+        if verbose:
+            print("\nFragments founded:\n")
+            for fragment in fragments:
+                print(f"{fragment['similarity']}\n{fragment['text'][:80]}")
+
+        context_text = "\n\n--\n\n".join(
+            [
+                f"Source: {fragment['metadata'].get('')}{fragment['text']}"
+                for fragment in fragments
+            ]
+        )
+
+        system_prompt = """Eres un asistente experto que responde preguntas
+        basándote ÚNICAMENTE en el contexto proporcionado.
+        Reglas:
+        - Si la respuesta está en el contexto, respóndela directamente y con precisión.
+        - Si el contexto no contiene suficiente información, dilo honestamente.
+        - Cita la fuente cuando sea relevante.
+        - No inventes información que no esté en el contexto.
+        - Responde en el mismo idioma de la pregunta."""
+
+        user_prompt = f"""Contexto disponible:
+        {context_text}
+        Pregunta: {question}"""
+
+        response = openai_client.chat.completions.create(
+            model="gpt-5.6-luna",
+            reasoning_effort="low",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+
+        return {
+            "response": response.choices[0].message.content or "",
+            "fragments_used": fragments,
+            "are_there_context": True,
+        }
+
 
 if __name__ == "__main__":
     rag = RAGPipeline("investors_knowledge_base")
 
     # rag.index_chunks(long_text=INVESTOR_DATA)
 
-    retrieve_data = rag.retrieve_context(
-        "Que datos necesito de un aplicante para poder saber si puede pedir un prestamo hipotecario?"
+    response = rag.answer(
+        """Dime cual es el FICO minimo que debo tener, cuanto es el LTV maximo que ofrece el investor,
+        para que tipo de propiedad puedo pedir el prestamo, aceptan la documentacion w2"""
     )
 
-    print(retrieve_data)
+    if response:
+        print(response["response"])
