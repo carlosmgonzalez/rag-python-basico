@@ -9,7 +9,8 @@ from chromadb.utils import embedding_functions
 from dotenv import load_dotenv
 
 from src.ai.openai_client import openai_client
-from src.rag.knowledge_base import INVESTOR_DATA
+
+# from src.rag.knowledge_base import INVESTOR_DATA
 
 load_dotenv()
 
