@@ -23,7 +23,7 @@ class PDFProcessor:
                 page_text = page.extract_text()
 
                 if page_text and page_text.strip():
-                    pages_text.append(f"[Pagina {page_number}\n{page_text}")
+                    pages_text.append(f"[Pagina {page_number}]\n{page_text}")
 
             return "\n\n".join(pages_text)
 
@@ -37,3 +37,48 @@ class PDFProcessor:
             folder.mkdir(parents=True, exist_ok=True)
 
         return list(folder.glob("*.pdf"))
+
+
+class IndexRegistry:
+    def __init__(self, registry_path: Path):
+        self.path = registry_path
+        self.registry: dict[str, int] = {}
+        self._load()
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            return
+
+        with open(self.path, "r") as file:
+            for line in file.read().splitlines():
+                if not line.strip():
+                    continue
+
+                parts = line.rsplit(":", 1)
+
+                if len(parts) == 2:
+                    name, size = parts
+                    self.registry[name] = int(size)
+
+    def save(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(self.path, "w") as file:
+            for name, size in self.registry.items():
+                file.writelines(f"{name}:{size}")
+
+    def is_indexed(self, pdf_path: Path) -> bool:
+        if pdf_path.name not in self.registry:
+            return False
+
+        return True
+
+
+if __name__ == "__main__":
+    pdf_path = Path(
+        "/Users/carlos/Code/curso-python-ia/rag-python-basico/proton-recovery-phrase.pdf"
+    )
+    # registry = IndexRegistry(pdf_path)
+
+    pdf_text = PDFProcessor.extract_text(pdf_path)
+    print(pdf_text)
