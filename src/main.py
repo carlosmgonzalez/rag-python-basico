@@ -1,7 +1,5 @@
 from src.rag.embeddings_demo import (
-    cosine_similarity,
     demonstrate_semantic_similarity,
-    get_embedding,
 )
 
 

@@ -120,7 +120,7 @@ class RAGPipeline:
 
     def answer(
         self, question: str, n_fragments: int = 3, verbose: bool = False
-    ) -> ResponseAnswer | None:
+    ) -> ResponseAnswer:
         fragments = self.retrieve_context(question=question, n_fragments=n_fragments)
 
         if not fragments:
