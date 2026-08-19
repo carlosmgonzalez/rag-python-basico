@@ -190,19 +190,42 @@ class ChatWithPDFs:
 
                 with console.status("[dim]Buscando en tus documentos...[/dim]"):
                     result = self.rag.answer(question=question)
-                    console.print(
-                        Panel(
-                            result["response"], title="Asistente", border_style="blue"
-                        )
-                    )
+
+                # Response
+                console.print(
+                    Panel(result["response"], title="Asistente", border_style="blue")
+                )
+
+                if result.get("fragments_used"):
+                    console.print("[dim]Funtes consultadas:[/dim]")
+
+                    seen = set()
+
+                    for fragment in result["fragments_used"]:
+                        source = fragment["metadata"]
+
+                        if source not in seen:
+                            console.print(f"[dim]{source}[/dim]")
+                            seen.add(source)
+
+            except KeyboardInterrupt:
+                console.print("[dim]Hasta luego[/dim]")
 
             except Exception as e:
-                pass
+                console.print(f"[red]Error inesperado: {e}[/red]")
+
+
+def main():
+    system = ChatWithPDFs()
+    _ = system.index_new_pdfs()
+    system.show_status()
+    system.chat()
 
 
 if __name__ == "__main__":
-    pdf_path = Path("./proton-recovery-phrase.pdf")
-    # registry = IndexRegistry(pdf_path)
+    main()
 
-    pdf_text = PDFProcessor.extract_text(pdf_path)
-    print(pdf_text)
+    # pdf_path = Path("./proton-recovery-phrase.pdf")
+    # registry = IndexRegistry(pdf_path)
+    # pdf_text = PDFProcessor.extract_text(pdf_path)
+    # print(pdf_text)
